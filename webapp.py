@@ -101,7 +101,7 @@ if "authenticated" not in st.session_state:
 # --- パスワード認証ロジック ---
 if not st.session_state.authenticated:
     password = st.text_input("パスワードを入力してください", type="password")
-    if password == "himitsu_no_kotoba":  # 好きなパスワードに変更してください
+    if password == "OgameZen":  # 好きなパスワードに変更してください
         st.session_state.authenticated = True
         st.rerun()  # ページを再読み込みしてパスワード入力欄を消す
     elif password:
