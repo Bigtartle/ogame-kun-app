@@ -25,25 +25,24 @@ def main():
         st.header("設定")
         # 1. 解析方法を最初に選択
         analysis_method = st.radio(
-            "解析方法を選択",
+            "1. 解析方法を選択",
             ("位相直交法", "位相比較法"),
             key='analysis_method'
         )
         
         # 2. ファイルアップローダー
-        uploaded_file = st.file_uploader("データファイルを選択してください")
+        uploaded_file = st.file_uploader("2. データファイルを選択")
 
         # --- ファイルがアップロードされた後、UIを表示 ---
         if st.session_state.df is not None:
-            df_for_ui = st.session_state.df # UI表示用のデータフレーム
+            df_for_ui = st.session_state.df
             st.divider()
-            st.header("列の割り当て")
+            st.header("3. 列の割り当て")
             st.write("表の列番号を、対応するデータの種類に割り当ててください。")
             
             col_options = list(df_for_ui.columns)
             mappings = st.session_state.column_mappings
             
-            # 磁場列の選択肢に「なし」を追加
             b_col_options = ["なし"] + col_options
 
             def get_index(key, default_index=0, options=col_options):
@@ -53,39 +52,48 @@ def main():
                     return 0
                 return options.index(value_to_find)
 
-            # --- 解析方法に応じて列の割り当てUIを変更 ---
-            if st.session_state.analysis_method == "位相直交法":
+            if analysis_method == "位相直交法":
                 mappings['Temp'] = st.selectbox("温度 (Temp) の列", col_options, index=get_index('Temp', 0))
-                mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=get_index('B', 2, b_col_options))
+                mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=get_index('B', 3, b_col_options))
                 mappings['Sin'] = st.selectbox("Sin(V) の列", col_options, index=get_index('Sin', 6))
                 mappings['Cos'] = st.selectbox("Cos(V) の列", col_options, index=get_index('Cos', 7))
                 mappings['Freq'] = st.selectbox("周波数 (Freq) の列", col_options, index=get_index('Freq', 8))
             
-            elif st.session_state.analysis_method == "位相比較法":
+            elif analysis_method == "位相比較法":
                 mappings['Temp'] = st.selectbox("温度 (Temp) の列", col_options, index=get_index('Temp', 0))
-                mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=get_index('B', 2, b_col_options))
+                mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=get_index('B', 3, b_col_options))
                 mappings['Freq'] = st.selectbox("周波数 (Freq) の列", col_options, index=get_index('Freq', 4))
 
             st.divider()
+            
+            st.header("4. 磁場補正（オプション）")
+            correction_type = st.radio("補正の種類を選択", ("磁場変化データ", "一定磁場データ"))
+            if correction_type == "磁場変化データ":
+                intended_start_b = st.number_input("本来の開始磁場 (T)", value=0.0, step=0.5)
+                intended_end_b = st.number_input("本来の終了磁場 (T)", value=3.0, step=0.5)
+            else:
+                intended_constant_b = st.number_input("本来かけた磁場 (T)", value=0.0, step=0.5)
+            correction_button = st.button("磁場データを補正")
 
-            # --- 不要な列を削除する機能 ---
-            st.header("列の削除（オプション）")
-            # 割り当てられていない列を候補にする
+            st.divider()
+            
+            # ★★★ ここに復活させました ★★★
+            st.header("5. 列の削除（オプション）")
             assigned_cols = [v for v in mappings.values() if v != 'なし']
             unassigned_cols = [c for c in df_for_ui.columns if c not in assigned_cols]
             cols_to_delete = st.multiselect("削除したい列（列番号）を選択", options=unassigned_cols)
             delete_button = st.button("選択した列を削除")
 
             st.divider()
-            st.header("計算パラメータと実行")
+            st.header("6. 計算パラメータと実行")
             
-            if st.session_state.analysis_method == "位相直交法":
+            if analysis_method == "位相直交法":
                 st.session_state.sample_length_l_cm = st.number_input("試料長 l (cm)", value=0.5, step=1e-9, format="%.9f")
                 st.session_state.sound_speed_v = st.number_input("音速 v (m/s)", value=3000.0, step=1e-9, format="%.9f")
                 att_run_button = st.button("超音波吸収を計算")
                 dc_run_button = st.button("弾性定数変化を計算")
             
-            elif st.session_state.analysis_method == "位相比較法":
+            elif analysis_method == "位相比較法":
                 st.session_state.f0_mhz = st.number_input("初期周波数 f₀ (MHz)", value=19.2933, step=1e-4, format="%.4f")
                 compare_method_button = st.button("弾性率相対変化を計算")
 
@@ -126,59 +134,63 @@ def main():
                 df.drop(columns=cols_to_delete_int, inplace=True)
                 st.success(f"{len(cols_to_delete)}個の列を削除しました。")
                 st.rerun()
+        
+        if 'correction_button' in locals() and correction_button:
+            b_col_name = mappings.get('B')
+            if b_col_name is not None and b_col_name != 'なし':
+                b_col_num = int(b_col_name)
+                if b_col_num in df.columns:
+                    b_col = df[b_col_num].astype(float)
+                    if 'correction_type' in locals() and correction_type == "磁場変化データ":
+                        actual_start_b, actual_end_b = b_col.iloc[0], b_col.iloc[-1]
+                        actual_range, intended_range = actual_end_b - actual_start_b, intended_end_b - intended_start_b
+                        if actual_range != 0:
+                            scaling_factor = intended_range / actual_range
+                            offset = intended_start_b - scaling_factor * actual_start_b
+                            df[b_col_num] = (scaling_factor * b_col + offset).round(4)
+                            st.success("磁場変化データの補正が完了しました。")
+                    elif 'correction_type' in locals() and correction_type == "一定磁場データ":
+                        df[b_col_num] = intended_constant_b
+                        st.success("一定磁場データの補正が完了しました。")
+                else: st.warning("割り当てられた磁場(B)の列が存在しません。")
+            else: st.warning("磁場(B)の列が「なし」に設定されているため、補正は実行できませんでした。")
 
         if 'att_run_button' in locals() and att_run_button:
             try:
                 sin_col = mappings.get('Sin')
                 cos_col = mappings.get('Cos')
                 if sin_col != 'なし' and cos_col != 'なし':
-                    sin_vals = df[sin_col].fillna(0).astype(float)
-                    cos_vals = df[cos_col].fillna(0).astype(float)
+                    sin_vals, cos_vals = df[sin_col].fillna(0).astype(float), df[cos_col].fillna(0).astype(float)
                     amplitude_sq = sin_vals**2 + cos_vals**2
                     amplitude_sq[amplitude_sq <= 0] = np.nan
-                    att_in_cm = -np.log(amplitude_sq) / (2 * st.session_state.sample_length_l_cm)
-                    df['att (1/cm)'] = att_in_cm.round(6)
+                    df['att (1/cm)'] = (-np.log(amplitude_sq) / (2 * st.session_state.sample_length_l_cm)).round(6)
                     st.success("超音波吸収の計算が完了しました。")
-                else:
-                    st.error("SinとCosの列を正しく割り当ててください。")
-            except Exception as e:
-                st.error(f"超音波吸収の計算中にエラーが発生しました: {e}")
+                else: st.error("SinとCosの列を正しく割り当ててください。")
+            except Exception as e: st.error(f"超音波吸収の計算中にエラーが発生しました: {e}")
 
         if 'dc_run_button' in locals() and dc_run_button:
             try:
-                sin_col = mappings.get('Sin')
-                cos_col = mappings.get('Cos')
-                freq_col = mappings.get('Freq')
+                sin_col, cos_col, freq_col = mappings.get('Sin'), mappings.get('Cos'), mappings.get('Freq')
                 if all(c is not None and c != 'なし' for c in [sin_col, cos_col, freq_col]):
                     phi = np.arctan2(df[sin_col].astype(float), df[cos_col].astype(float))
-                    unwrapped_phi = np.unwrap(phi)
-                    delta_phi = unwrapped_phi - unwrapped_phi[0]
-                    f_hz = df[freq_col].astype(float) * 1e6
-                    l_m = st.session_state.sample_length_l_cm / 100.0
+                    delta_phi = np.unwrap(phi) - np.unwrap(phi)[0]
+                    f_hz, l_m = df[freq_col].astype(float) * 1e6, st.session_state.sample_length_l_cm / 100.0
                     fai0 = (2 * np.pi * f_hz * l_m) / st.session_state.sound_speed_v
                     fai0[fai0 == 0] = np.nan
-                    dc_per_c = -2 * delta_phi / fai0
-                    df['DC/C'] = dc_per_c
+                    df['DC/C'] = -2 * delta_phi / fai0
                     st.success("弾性定数相対変化の計算が完了しました。")
-                else:
-                    st.error("Sin, Cos, Freqの列を正しく割り当ててください。")
-            except Exception as e:
-                st.error(f"弾性定数変化の計算中にエラーが発生しました: {e}")
+                else: st.error("Sin, Cos, Freqの列を正しく割り当ててください。")
+            except Exception as e: st.error(f"弾性定数変化の計算中にエラーが発生しました: {e}")
 
         if 'compare_method_button' in locals() and compare_method_button:
             try:
                 freq_col = mappings.get('Freq')
                 if freq_col is not None and freq_col != 'なし':
-                    freq_mhz = df[freq_col].astype(float)
-                    f0_mhz_val = st.session_state.f0_mhz
-                    delta_f_over_f0 = (freq_mhz - f0_mhz_val) / f0_mhz_val
-                    dc_per_c_comp = -1 * delta_f_over_f0
-                    df['DC/C (比較法)'] = dc_per_c_comp
+                    freq_mhz, f0_mhz_val = df[freq_col].astype(float), st.session_state.f0_mhz
+                    df['DC/C (比較法)'] = -1 * (freq_mhz - f0_mhz_val) / f0_mhz_val
                     st.success("弾性率相対変化（比較法）の計算が完了しました。")
-                else:
-                    st.error("Freqの列を正しく割り当ててください。")
-            except Exception as e:
-                st.error(f"比較法の計算中にエラーが発生しました: {e}")
+                else: st.error("Freqの列を正しく割り当ててください。")
+            except Exception as e: st.error(f"比較法の計算中にエラーが発生しました: {e}")
         
     # --- メイン画面の表示 ---
     if st.session_state.df is not None:
@@ -199,10 +211,12 @@ def main():
                 new_filename = f"{base_name}(解析済み).txt"
             else:
                 new_filename = "result.txt"
+            
             output_df = st.session_state.df.copy()
             inv_map = {v: k for k, v in st.session_state.column_mappings.items() if v in output_df.columns and v != 'なし'}
             output_df.rename(columns=inv_map, inplace=True)
             output_text = output_df.to_csv(sep='\t', index=False)
+            
             st.download_button(label="表示されている結果を保存", data=output_text.encode('utf-8-sig'), file_name=new_filename, mime='text/plain')
     
 # --- アプリ全体の起動ロジック ---
