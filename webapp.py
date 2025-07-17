@@ -12,10 +12,7 @@ def main():
     認証成功後に実行されるアプリ本体の関数
     """
     # --- セッション状態でデータを保持 ---
-    if 'df' not in st.session_state:
-        st.session_state.df = None
-    if 'original_filename' not in st.session_state:
-        st.session_state.original_filename = None
+    # このmain関数の中では、セッション状態の初期化は不要
 
     # --- サイドバー ---
     with st.sidebar:
@@ -32,6 +29,7 @@ def main():
 
     # --- ファイルがアップロードされたときの処理 ---
     if uploaded_file is not None:
+        # 新しいファイルがアップロードされた場合のみ、データを読み込み直す
         if uploaded_file.name != st.session_state.get('original_filename', None):
             st.session_state.original_filename = uploaded_file.name
             try:
@@ -41,32 +39,66 @@ def main():
                 column_names = re.split(r'\s{2,}', header_line)
                 data_io = io.StringIO('\n'.join(lines[7:]))
                 df = pd.read_csv(data_io, delim_whitespace=True, header=None, names=column_names)
+
                 rename_dict = {}
                 for col in df.columns:
                     if '(' in col and ')' in col:
                         new_col_name = col.split('(')[0].strip()
                         rename_dict[col] = new_col_name
                 df.rename(columns=rename_dict, inplace=True)
+                
                 columns_to_drop = ['Rate', 'Vol_B', 'Phase', 'Amp']
                 existing_columns_to_drop = [col for col in columns_to_drop if col in df.columns]
                 if existing_columns_to_drop:
                     df = df.drop(columns=existing_columns_to_drop)
+
                 st.session_state.df = df
+                
             except Exception as e:
                 st.error(f"ファイルの読み込みに失敗しました: {e}")
                 st.session_state.df = None
                 st.session_state.original_filename = None
 
-    # --- 計算ボタンの処理 ---
+    # --- 超音波吸収の計算 ---
     if att_run_button and st.session_state.df is not None:
-        # ... (attの計算ロジックは変更なし) ...
-        pass # この部分は簡略化のため省略しますが、実際のコードには含まれます
+        try:
+            df = st.session_state.df
+            sin_col, cos_col = 'Sin', 'Cos'
+            if sin_col in df.columns and cos_col in df.columns:
+                sin_vals = df[sin_col].fillna(0).astype(float)
+                cos_vals = df[cos_col].fillna(0).astype(float)
+                amplitude_sq = sin_vals**2 + cos_vals**2
+                amplitude_sq[amplitude_sq <= 0] = np.nan
+                att_in_cm = -np.log(amplitude_sq) / (2 * sample_length_l_cm)
+                df['att (1/cm)'] = att_in_cm.round(6)
+                st.success("超音波吸収の計算が完了しました。")
+            else:
+                st.error(f"データに '{sin_col}' または '{cos_col}' の列が見つかりません。")
+        except Exception as e:
+            st.error(f"超音波吸収の計算中にエラーが発生しました: {e}")
 
+    # --- 弾性定数変化の計算 ---
     if dc_run_button and st.session_state.df is not None:
-        # ... (DC/Cの計算ロジックは変更なし) ...
-        pass # この部分は簡略化のため省略しますが、実際のコードには含まれます
+        try:
+            df = st.session_state.df
+            sin_col, cos_col, freq_col = 'Sin', 'Cos', 'Freq'
+            if all(c in df.columns for c in [sin_col, cos_col, freq_col]):
+                phi = np.arctan2(df[sin_col].astype(float), df[cos_col].astype(float))
+                unwrapped_phi = np.unwrap(phi)
+                delta_phi = unwrapped_phi - unwrapped_phi[0]
+                f_hz = df[freq_col].astype(float) * 1e6
+                l_m = sample_length_l_cm / 100.0
+                fai0 = (2 * np.pi * f_hz * l_m) / sound_speed_v
+                fai0[fai0 == 0] = np.nan
+                dc_per_c = -2 * delta_phi / fai0
+                df['DC/C'] = dc_per_c
+                st.success("弾性定数相対変化の計算が完了しました。")
+            else:
+                st.error(f"計算に必要な列 ('{sin_col}', '{cos_col}', '{freq_col}') が見つかりません。")
+        except Exception as e:
+            st.error(f"弾性定数変化の計算中にエラーが発生しました: {e}")
 
-    # --- メイン画面の表示 ---
+    # --- メイン画面のデータフレーム表示 ---
     if st.session_state.df is not None:
         st.dataframe(st.session_state.df)
     else:
@@ -75,8 +107,15 @@ def main():
     # --- ダウンロードボタン ---
     with st.sidebar:
         if st.session_state.df is not None:
-            # ... (ダウンロードボタンのロジックは変更なし) ...
-            pass # この部分は簡略化のため省略しますが、実際のコードには含まれます
+            st.divider()
+            st.header("保存")
+            if st.session_state.original_filename:
+                base_name, _ = os.path.splitext(st.session_state.original_filename)
+                new_filename = f"{base_name}(解析済み).txt"
+            else:
+                new_filename = "result.txt"
+            output_text = st.session_state.df.to_csv(sep='\t', index=False)
+            st.download_button(label="表示されている結果を保存", data=output_text.encode('utf-8-sig'), file_name=new_filename, mime='text/plain')
 
     # --- 豆知識コーナー ---
     st.divider()
@@ -88,9 +127,8 @@ def main():
     ]
     st.info(random.choice(trivia_list))
 
-# --- ★★★★★ ここからが変更した部分 ★★★★★ ---
+# --- アプリ全体の起動ロジック ---
 
-# --- アプリの基本設定とタイトル ---
 st.set_page_config(page_title="OGAME-KUN", layout="wide")
 st.title("*OGAME-KUN*")
 
@@ -101,9 +139,9 @@ if "authenticated" not in st.session_state:
 # --- パスワード認証ロジック ---
 if not st.session_state.authenticated:
     password = st.text_input("パスワードを入力してください", type="password")
-    if password == "OgameZen":  # 好きなパスワードに変更してください
+    if password == "OgameZen":  # ★★★ パスワードを更新しました ★★★
         st.session_state.authenticated = True
-        st.rerun()  # ページを再読み込みしてパスワード入力欄を消す
+        st.rerun()
     elif password:
         st.warning("パスワードが違います。")
 else:
