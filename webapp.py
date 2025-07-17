@@ -35,7 +35,7 @@ def main():
 
         # --- ファイルがアップロードされた後、UIを表示 ---
         if st.session_state.df is not None:
-            df_for_ui = st.session_state.df
+            df_for_ui = st.session_state.df # UI表示用のデータフレーム
             st.divider()
             st.header("列の割り当て")
             st.write("表の列番号を、対応するデータの種類に割り当ててください。")
@@ -43,6 +43,7 @@ def main():
             col_options = list(df_for_ui.columns)
             mappings = st.session_state.column_mappings
             
+            # 磁場列の選択肢に「なし」を追加
             b_col_options = ["なし"] + col_options
 
             def get_index(key, default_index=0, options=col_options):
@@ -66,23 +67,10 @@ def main():
                 mappings['Freq'] = st.selectbox("周波数 (Freq) の列", col_options, index=get_index('Freq', 4))
 
             st.divider()
-            
-            st.header("磁場補正（オプション）")
-            correction_type = st.radio(
-                "補正の種類を選択",
-                ("磁場変化データ", "一定磁場データ"),
-                help="磁場変化：0T⇄3Tのように磁場を変化させたデータ。一定磁場：特定の磁場で温度を変化させたデータ。"
-            )
-            if correction_type == "磁場変化データ":
-                intended_start_b = st.number_input("本来の開始磁場 (T)", value=0.0, step=0.5)
-                intended_end_b = st.number_input("本来の終了磁場 (T)", value=3.0, step=0.5)
-            else:
-                intended_constant_b = st.number_input("本来かけた磁場 (T)", value=0.0, step=0.5)
-            correction_button = st.button("磁場データを補正")
 
-            st.divider()
-            
+            # --- 不要な列を削除する機能 ---
             st.header("列の削除（オプション）")
+            # 割り当てられていない列を候補にする
             assigned_cols = [v for v in mappings.values() if v != 'なし']
             unassigned_cols = [c for c in df_for_ui.columns if c not in assigned_cols]
             cols_to_delete = st.multiselect("削除したい列（列番号）を選択", options=unassigned_cols)
@@ -138,30 +126,6 @@ def main():
                 df.drop(columns=cols_to_delete_int, inplace=True)
                 st.success(f"{len(cols_to_delete)}個の列を削除しました。")
                 st.rerun()
-        
-        if 'correction_button' in locals() and correction_button:
-            b_col_name = mappings.get('B')
-            if b_col_name is not None and b_col_name != 'なし':
-                b_col_num = int(b_col_name)
-                if b_col_num in df.columns:
-                    b_col = df[b_col_num].astype(float)
-                    if correction_type == "磁場変化データ":
-                        actual_start_b = b_col.iloc[0]
-                        actual_end_b = b_col.iloc[-1]
-                        actual_range = actual_end_b - actual_start_b
-                        intended_range = intended_end_b - intended_start_b
-                        if actual_range != 0:
-                            scaling_factor_a = intended_range / actual_range
-                            offset_b = intended_start_b - scaling_factor_a * actual_start_b
-                            df[b_col_num] = (scaling_factor_a * b_col + offset_b).round(4)
-                            st.success("磁場変化データの補正が完了しました。")
-                    elif correction_type == "一定磁場データ":
-                        df[b_col_num] = intended_constant_b
-                        st.success("一定磁場データの補正が完了しました。")
-                else:
-                    st.warning("割り当てられた磁場(B)の列が存在しません。")
-            else:
-                st.warning("磁場(B)の列が「なし」に設定されているため、補正は実行できませんでした。")
 
         if 'att_run_button' in locals() and att_run_button:
             try:
@@ -221,18 +185,7 @@ def main():
         display_df = st.session_state.df.copy()
         inverse_mappings = {v: k for k, v in st.session_state.column_mappings.items() if v in display_df.columns and v != 'なし'}
         display_df.rename(columns=inverse_mappings, inplace=True)
-        
-        with st.sidebar:
-            st.divider()
-            st.header("表示設定")
-            all_display_cols = list(display_df.columns)
-            default_cols = [col for col in all_display_cols if col not in [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]] # 計算結果と割り当てた列をデフォルト表示
-            selected_cols = st.multiselect("表示する列を選択", options=all_display_cols, default=default_cols)
-        
-        if selected_cols:
-            st.dataframe(display_df[selected_cols])
-        else:
-            st.warning("表示する列が選択されていません。")
+        st.dataframe(display_df)
     else:
         st.info("ファイルをアップロードして、解析方法を選択してください。")
 
@@ -246,12 +199,10 @@ def main():
                 new_filename = f"{base_name}(解析済み).txt"
             else:
                 new_filename = "result.txt"
-            
             output_df = st.session_state.df.copy()
             inv_map = {v: k for k, v in st.session_state.column_mappings.items() if v in output_df.columns and v != 'なし'}
             output_df.rename(columns=inv_map, inplace=True)
             output_text = output_df.to_csv(sep='\t', index=False)
-            
             st.download_button(label="表示されている結果を保存", data=output_text.encode('utf-8-sig'), file_name=new_filename, mime='text/plain')
     
 # --- アプリ全体の起動ロジック ---
