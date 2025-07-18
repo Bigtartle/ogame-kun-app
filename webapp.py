@@ -176,8 +176,8 @@ def main():
                     delta_phi = np.unwrap(phi) - np.unwrap(phi)[0]
                     f_hz, l_m = df[freq_col].astype(float) * 1e6, st.session_state.sample_length_l_cm / 100.0
                     fai0 = (2 * np.pi * f_hz * l_m) / st.session_state.sound_speed_v
-                    fai0[fai0 == 0] = np.nan
-                    df['DC/C'] = -2 * delta_phi / fai0
+                    dc_per_c = (fai0**2 / (fai0 + delta_phi)**2) - 1
+                    df['DC/C'] = dc_per_c
                     st.success("弾性定数相対変化の計算が完了しました。")
                 else: st.error("Sin, Cos, Freqの列を正しく割り当ててください。")
             except Exception as e: st.error(f"弾性定数変化の計算中にエラーが発生しました: {e}")
@@ -187,7 +187,9 @@ def main():
                 freq_col = mappings.get('Freq')
                 if freq_col is not None and freq_col != 'なし':
                     freq_mhz, f0_mhz_val = df[freq_col].astype(float), st.session_state.f0_mhz
-                    df['DC/C (比較法)'] = -1 * (freq_mhz - f0_mhz_val) / f0_mhz_val
+                    delta_f_over_f0 = (freq_mhz - f0_mhz_val) / f0_mhz_val
+                    dc_per_c_comp = 2 * delta_f_over_f0 + (delta_f_over_f0)**2
+                    df['DC/C (比較法)'] = dc_per_c_comp
                     st.success("弾性率相対変化（比較法）の計算が完了しました。")
                 else: st.error("Freqの列を正しく割り当ててください。")
             except Exception as e: st.error(f"比較法の計算中にエラーが発生しました: {e}")
