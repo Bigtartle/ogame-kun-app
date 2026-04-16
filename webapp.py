@@ -77,7 +77,6 @@ def main():
 
             st.divider()
             
-            # ★★★ ここに復活させました ★★★
             st.header("5. 列の削除（オプション）")
             assigned_cols = [v for v in mappings.values() if v != 'なし']
             unassigned_cols = [c for c in df_for_ui.columns if c not in assigned_cols]
@@ -114,7 +113,10 @@ def main():
                     except (ValueError, IndexError):
                         continue
                 data_io = io.StringIO('\n'.join(lines[data_start_index:]))
-                df = pd.read_csv(data_io, delim_whitespace=True, header=None)
+                
+                # ★修正箇所：delim_whitespace=True を sep=r'\s+' に変更
+                df = pd.read_csv(data_io, sep=r'\s+', header=None, engine='python')
+                
                 st.session_state.df = df
                 st.session_state.column_mappings = {} 
                 st.rerun()
