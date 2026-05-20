@@ -22,7 +22,7 @@ def main():
     """
     # --- サイドバー ---
     with st.sidebar:
-        st.header("超音波実験データ解析ソフト")
+        st.header("超音波実験データ解析")
         # 1. 解析方法を最初に選択
         analysis_method = st.radio(
             "1. 解析方法を選択",
