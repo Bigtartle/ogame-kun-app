@@ -57,6 +57,8 @@ def main():
                 mappings['B'] = 0
                 mappings['Temp'] = 2
                 mappings['Freq'] = 3
+                
+                # 安全対策：裏でのデータ破壊（列削除）はやめてアナウンスのみにする
                 st.success("【自動設定完了】\n- 0番: 磁場 (B)\n- 2番: 温度 (Temp)\n- 3番: 周波数 (Freq)")
 
             # --- 列の割り当てUIを表示するセクション ---
@@ -74,44 +76,4 @@ def main():
 
             if analysis_method == "位相直交法":
                 mappings['Temp'] = st.selectbox("温度 (Temp) の列", col_options, index=get_index('Temp', 0))
-                mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=get_index('B', 3, b_col_options))
-                mappings['Sin'] = st.selectbox("Sin(V) の列", col_options, index=get_index('Sin', 6))
-                mappings['Cos'] = st.selectbox("Cos(V) の列", col_options, index=get_index('Cos', 7))
-                mappings['Freq'] = st.selectbox("周波数 (Freq) の列", col_options, index=get_index('Freq', 8))
-            
-            elif analysis_method == "位相比較法":
-                # モードに応じたデフォルトの選択位置を設定
-                default_temp_idx = 2 if measurement_mode == "温度一定磁場依存" else 0
-                default_b_idx = 0 if measurement_mode == "温度一定磁場依存" else 3
-                default_freq_idx = 3 if measurement_mode == "温度一定磁場依存" else 4
-                
-                mappings['Temp'] = st.selectbox("温度 (Temp) の列", col_options, index=get_index('Temp', default_temp_idx))
-                mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=get_index('B', default_b_idx, b_col_options))
-                mappings['Freq'] = st.selectbox("周波数 (Freq) の列", col_options, index=get_index('Freq', default_freq_idx))
-
-            # --- 手動列削除UI（手動割り当て時のみ表示して安全性を確保） ---
-            if measurement_mode == "手動で列を割り当てる":
-                st.divider()
-                st.subheader("列の削除（オプション）")
-                assigned_cols = [v for v in mappings.values() if v != 'なし']
-                unassigned_cols = [c for c in df_for_ui.columns if c not in assigned_cols]
-                cols_to_delete = st.multiselect("削除したい列（列番号）を選択", options=unassigned_cols)
-                if st.button("選択した列を削除"):
-                    if cols_to_delete:
-                        cols_to_delete_int = [int(c) for c in cols_to_delete]
-                        st.session_state.df.drop(columns=cols_to_delete_int, inplace=True)
-                        st.success(f"{len(cols_to_delete)}個の列を削除しました。")
-                        st.rerun()
-
-            st.divider()
-            st.header("4. 磁場補正（オプション）")
-            correction_type = st.radio("補正の種類を選択", ("磁場変化データ", "一定磁場データ"))
-            if correction_type == "磁場変化データ":
-                intended_start_b = st.number_input("本来の開始磁場 (T)", value=0.0, step=0.5)
-                intended_end_b = st.number_input("本来の終了磁場 (T)", value=3.0, step=0.5)
-            else:
-                intended_constant_b = st.number_input("本来かけた磁場 (T)", value=0.0, step=0.5)
-            correction_button = st.button("磁場データを補正")
-
-            st.divider()
-            st.
+                mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=get_index('B', 3,
