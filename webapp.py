@@ -58,16 +58,19 @@ def main():
                 mappings['Temp'] = 2
                 mappings['Freq'] = 3
                 
-                # 指定列（0, 2, 3）以外の列を自動で削除
+                # 指定列（0, 2, 3）以外の列を自動で削除（切れないよう改行調整）
                 keep_cols = [0, 2, 3]
                 cols_to_drop = [c for c in df_for_ui.columns if c not in keep_cols]
                 if cols_to_drop:
-                    st.session_state.df.drop(columns=cols_to_drop, inplace=True)
+                    st.session_state.df.drop(
+                        columns=cols_to_drop, 
+                        inplace=True
+                    )
                     st.toast("指定された列以外を自動削除しました！", icon="✂️")
                 
                 st.success("【自動設定完了】\n- 0番: 磁場 (B)\n- 2番: 温度 (Temp)\n- 3番: 周波数 (Freq)")
 
-            # --- ★★★ 列の割り当てUIを表示するセクション ★★★ ---
+            # --- 列の割り当てUIを表示するセクション ---
             st.divider()
             st.subheader("列の割り当て（確認・調整）")
             st.write("現在の列の割り当て状況です。必要に応じて変更できます。")
@@ -97,7 +100,7 @@ def main():
                 mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=get_index('B', default_b_idx, b_col_options))
                 mappings['Freq'] = st.selectbox("周波数 (Freq) の列", col_options, index=get_index('Freq', default_freq_idx))
 
-            # --- 手動列削除UI（必要な場合のみ表示） ---
+            # --- 手動列削除UI ---
             if measurement_mode == "手動で列を割り当てる" or measurement_mode in ["磁場一定温度依存", "温度依存"]:
                 st.divider()
                 st.subheader("列の削除（オプション）")
@@ -107,4 +110,13 @@ def main():
                 if st.button("選択した列を削除"):
                     if cols_to_delete:
                         cols_to_delete_int = [int(c) for c in cols_to_delete]
-                        st.session_state.df.drop(columns
+                        st.session_state.df.drop(columns=cols_to_delete_int, inplace=True)
+                        st.success(f"{len(cols_to_delete)}個の列を削除しました。")
+                        st.rerun()
+
+            st.divider()
+            st.header("4. 磁場補正（オプション）")
+            correction_type = st.radio("補正の種類を選択", ("磁場変化データ", "一定磁場データ"))
+            if correction_type == "磁場変化データ":
+                intended_start_b = st.number_input("本来の開始磁場 (T)", value=0.0, step=0.5)
+                intended_end_b = st.number_
