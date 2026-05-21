@@ -22,7 +22,7 @@ def main():
     """
     # --- サイドバー ---
     with st.sidebar:
-        st.header("超音波実験データ解析")
+        st.header("設定")
         # 1. 解析方法を最初に選択
         analysis_method = st.radio(
             "1. 解析方法を選択",
@@ -37,34 +37,12 @@ def main():
         if st.session_state.df is not None:
             df_for_ui = st.session_state.df
             st.divider()
+            st.header("3. 列の割り当て")
+            st.write("表の列番号を、対応するデータの種類に割り当ててください。")
             
-            # --- 測定モードの選択 ---
-            st.header("3. 測定モードの選択")
-            if analysis_method == "位相比較法":
-                measurement_mode = st.selectbox(
-                    "測定モードを選択してください",
-                    ("手動で列を割り当てる", "温度一定磁場依存", "磁場一定温度依存", "温度依存")
-                )
-            else:
-                measurement_mode = "手動で列を割り当てる"
-
-            # --- 自動処理の適用 ---
-            mappings = st.session_state.column_mappings
             col_options = list(df_for_ui.columns)
-
-            if measurement_mode == "温度一定磁場依存":
-                # 自動割り当て (0: 磁場, 2: 温度, 3: 周波数)
-                mappings['B'] = 0
-                mappings['Temp'] = 2
-                mappings['Freq'] = 3
-                
-                # 安全対策：裏でのデータ破壊（列削除）はやめてアナウンスのみにする
-                st.success("【自動設定完了】\n- 0番: 磁場 (B)\n- 2番: 温度 (Temp)\n- 3番: 周波数 (Freq)")
-
-            # --- 列の割り当てUIを表示するセクション ---
-            st.divider()
-            st.subheader("列の割り当て（確認・調整）")
-            st.write("現在の列の割り当て状況です。必要に応じて変更できます。")
+            mappings = st.session_state.column_mappings
+            
             b_col_options = ["なし"] + col_options
 
             def get_index(key, default_index=0, options=col_options):
@@ -76,4 +54,44 @@ def main():
 
             if analysis_method == "位相直交法":
                 mappings['Temp'] = st.selectbox("温度 (Temp) の列", col_options, index=get_index('Temp', 0))
-                mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=get_index('B', 3,
+                mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=get_index('B', 3, b_col_options))
+                mappings['Sin'] = st.selectbox("Sin(V) の列", col_options, index=get_index('Sin', 6))
+                mappings['Cos'] = st.selectbox("Cos(V) の列", col_options, index=get_index('Cos', 7))
+                mappings['Freq'] = st.selectbox("周波数 (Freq) の列", col_options, index=get_index('Freq', 8))
+            
+            elif analysis_method == "位相比較法":
+                mappings['Temp'] = st.selectbox("温度 (Temp) の列", col_options, index=get_index('Temp', 0))
+                mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=get_index('B', 3, b_col_options))
+                mappings['Freq'] = st.selectbox("周波数 (Freq) の列", col_options, index=get_index('Freq', 4))
+
+            st.divider()
+            
+            st.header("4. 磁場補正（オプション）")
+            correction_type = st.radio("補正の種類を選択", ("磁場変化データ", "一定磁場データ"))
+            if correction_type == "磁場変化データ":
+                intended_start_b = st.number_input("本来の開始磁場 (T)", value=0.0, step=0.5)
+                intended_end_b = st.number_input("本来の終了磁場 (T)", value=3.0, step=0.5)
+            else:
+                intended_constant_b = st.number_input("本来かけた磁場 (T)", value=0.0, step=0.5)
+            correction_button = st.button("磁場データを補正")
+
+            st.divider()
+            
+            st.header("5. 列の削除（オプション）")
+            assigned_cols = [v for v in mappings.values() if v != 'なし']
+            unassigned_cols = [c for c in df_for_ui.columns if c not in assigned_cols]
+            cols_to_delete = st.multiselect("削除したい列（列番号）を選択", options=unassigned_cols)
+            delete_button = st.button("選択した列を削除")
+
+            st.divider()
+            st.header("6. 計算パラメータと実行")
+            
+            if analysis_method == "位相直交法":
+                st.session_state.sample_length_l_cm = st.number_input("試料長 l (cm)", value=0.5, step=1e-9, format="%.9f")
+                st.session_state.sound_speed_v = st.number_input("音速 v (m/s)", value=3000.0, step=1e-9, format="%.9f")
+                att_run_button = st.button("超音波吸収を計算")
+                dc_run_button = st.button("弾性定数変化を計算")
+            
+            elif analysis_method == "位相比較法":
+                st.session_state.f0_mhz = st.number_input("初期周波数 f₀ (MHz)", value=19.2933, step=1e-4, format="%.4f")
+                compare_method_button = st.button("弾性率相対変化を計算")
