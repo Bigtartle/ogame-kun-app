@@ -82,8 +82,6 @@ def main():
                 return options.index(value_to_find)
 
             if analysis_method == "位相直交法":
-                # ★初期値のご指定通りにデフォルトインデックスを変更 (Temp:2, B:0, Sin:5, Cos:6, Freq:7)
-                # 磁場(B)は、b_col_optionsの0番目が「なし」で1番目が「0」になるため、デフォルトで「0」を指すように 1 を指定
                 mappings['Temp'] = st.selectbox("温度 (Temp) の列", col_options, index=get_index('Temp', 2))
                 mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=get_index('B', 1, b_col_options))
                 mappings['Sin'] = st.selectbox("Sin(V) の列", col_options, index=get_index('Sin', 5))
@@ -192,7 +190,17 @@ def main():
                         st.error(f"弾性定数変化の計算中にエラーが発生しました: {e}")
             
             elif analysis_method == "位相比較法":
-                f0_mhz = st.number_input("初期周波数 f₀ (MHz)", value=19.2933, step=1e-4, format="%.4f")
+                # Freqの列が正しく割り当てられている場合、0行目の値をデフォルト値（初期値）として自動取得する
+                compare_freq_col = mappings.get('Freq')
+                if compare_freq_col is not None and compare_freq_col in df.columns:
+                    try:
+                        default_f0 = float(df[compare_freq_col].iloc[0])
+                    except Exception:
+                        default_f0 = 19.2933
+                else:
+                    default_f0 = 19.2933
+
+                f0_mhz = st.number_input("初期周波数 f₀ (MHz)", value=default_f0, step=1e-4, format="%.4f")
                 
                 # --- 弾性率相対変化（比較法）ボタン ---
                 if st.button("弾性率相対変化を計算"):
@@ -202,7 +210,7 @@ def main():
                             freq_mhz = df[freq_col].astype(float)
                             delta_f_over_f0 = (freq_mhz - f0_mhz) / f0_mhz
                             dc_per_c_comp = 2 * delta_f_over_f0 + (delta_f_over_f0)**2
-                            df['DC/C'] = dc_per_c_comp
+                            df['DC/C'] = dc_per_c_comp  # 表示名の整合性のため 'DC/C' に統一しました
                             st.success("弾性率相対変化（比較法）の計算が完了しました。")
                             st.rerun()
                         else:
