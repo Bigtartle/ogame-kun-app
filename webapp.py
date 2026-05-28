@@ -54,7 +54,11 @@ def main():
                 df = pd.read_csv(data_io, sep=r'\s+', header=None, engine='python')
                 
                 st.session_state.df = df
-                st.session_state.column_mappings = {} 
+                # ★ファイル読み込み時にマッピングを完全にクリアせず、選択されたモードを維持するための修正
+                if 'current_mode' in st.session_state:
+                    mode_option = st.session_state.current_mode
+                else:
+                    mode_option = "手動設定"
                 st.rerun()
             except Exception as e:
                 st.error(f"ファイルの読み込みに失敗しました: {e}")
@@ -72,15 +76,17 @@ def main():
         with st.sidebar:
             st.divider()
             
-            # --- 【新機能】データ情報のボタン（測定モード選択） ---
+            # --- 測定モードの自動選択 ---
             st.header("3. 測定モードの自動選択")
             if analysis_method == "位相比較法":
+                # keyを指定してセッションでモードを永続化
                 mode_option = st.radio(
                     "モードを選択すると列が自動割当されます",
-                    ("手動設定", "無磁場温度依存", "磁場一定温度依存", "温度一定磁場依存")
+                    ("手動設定", "無磁場温度依存", "磁場一定温度依存", "温度一定磁場依存"),
+                    key='current_mode'
                 )
                 
-                # ボタン（ラジオボタン）の選択状態に応じてセッションの値を強制書き換え
+                # モードに応じてマッピングを「強制固定」
                 if mode_option == "無磁場温度依存":
                     mappings['Temp'] = 0
                     mappings['B'] = "なし"
@@ -98,7 +104,14 @@ def main():
 
             st.divider()
             st.header("4. 列の割り当て確認")
-            st.write("現在の割り当て状況です（手動変更も可能です）。")
+            
+            # 自動モードの時は手動で狂わないように注意書きを表示
+            if mode_option != "手動設定":
+                st.caption("⚠️自動モード有効中（列は固定されています）")
+                is_disabled = True
+            else:
+                st.write("表の列番号を割り当ててください。")
+                is_disabled = False
             
             def get_index(key, default_index=0, options=col_options):
                 safe_default_index = min(default_index, len(options) - 1)
@@ -115,18 +128,19 @@ def main():
                 mappings['Freq'] = st.selectbox("周波数 (Freq) の列", col_options, index=get_index('Freq', 7))
             
             elif analysis_method == "位相比較法":
-                # 自動設定の値を反映させつつUIを表示
-                default_t = mappings.get('Temp', 0)
-                default_b = mappings.get('B', "なし")
-                default_f = mappings.get('Freq', 4)
+                # 自動設定された値を最優先でインデックス化する（ズレ対策の核心）
+                val_t = mappings.get('Temp', 0)
+                val_b = mappings.get('B', "なし")
+                val_f = mappings.get('Freq', 4)
                 
-                idx_t = col_options.index(default_t) if default_t in col_options else 0
-                idx_b = b_col_options.index(default_b) if default_b in b_col_options else 0
-                idx_f = col_options.index(default_f) if default_f in col_options else 0
+                idx_t = col_options.index(val_t) if val_t in col_options else 0
+                idx_b = b_col_options.index(val_b) if val_b in b_col_options else 0
+                idx_f = col_options.index(val_f) if val_f in col_options else 0
 
-                mappings['Temp'] = st.selectbox("温度 (Temp) の列", col_options, index=idx_t)
-                mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=idx_b)
-                mappings['Freq'] = st.selectbox("周波数 (Freq) の列", col_options, index=idx_f)
+                # disabled引数を入れて、自動選択時は勝手に動かないようにガード
+                mappings['Temp'] = st.selectbox("温度 (Temp) の列", col_options, index=idx_t, disabled=is_disabled)
+                mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=idx_b, disabled=is_disabled)
+                mappings['Freq'] = st.selectbox("周波数 (Freq) の列", col_options, index=idx_f, disabled=is_disabled)
 
             st.divider()
             st.header("5. 磁場補正（オプション）")
@@ -167,7 +181,6 @@ def main():
             assigned_cols = [v for v in mappings.values() if v != 'なし']
             unassigned_cols = [c for c in df.columns if c not in assigned_cols]
             
-            # 【新機能】自動選択時に、割り当てられなかった列が最初から選ばれた状態にする
             if mode_option != "手動設定":
                 default_delete_cols = unassigned_cols
             else:
