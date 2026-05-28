@@ -202,7 +202,7 @@ def main():
                             freq_mhz = df[freq_col].astype(float)
                             delta_f_over_f0 = (freq_mhz - f0_mhz) / f0_mhz
                             dc_per_c_comp = 2 * delta_f_over_f0 + (delta_f_over_f0)**2
-                            df['DC/C (比較法)'] = dc_per_c_comp
+                            df['DC/C'] = dc_per_c_comp
                             st.success("弾性率相対変化（比較法）の計算が完了しました。")
                             st.rerun()
                         else:
