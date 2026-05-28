@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import io
 import os
+import random
+import sys
 
 # --- セッション状態の初期化 ---
 if 'df' not in st.session_state:
@@ -49,7 +51,6 @@ def main():
                         continue
                 data_io = io.StringIO('\n'.join(lines[data_start_index:]))
                 
-                # Pandasでの動作を保証するため sep=r'\s+' を使用
                 df = pd.read_csv(data_io, sep=r'\s+', header=None, engine='python')
                 
                 st.session_state.df = df
@@ -100,8 +101,7 @@ def main():
                 intended_end_b = st.number_input("本来の終了磁場 (T)", value=3.0, step=0.5)
             else:
                 intended_constant_b = st.number_input("本来かけた磁場 (T)", value=0.0, step=0.5)
-            
-            # --- 磁場補正ボタンの処理 ---
+                # --- 磁場補正ボタンの処理 ---
             if st.button("磁場データを補正"):
                 b_col_name = mappings.get('B')
                 if b_col_name is not None and b_col_name != 'なし':
@@ -147,6 +147,10 @@ def main():
             if analysis_method == "位相直交法":
                 sample_length_l_cm = st.number_input("試料長 l (cm)", value=0.5, step=1e-9, format="%.9f")
                 sound_speed_v = st.number_input("音速 v (m/s)", value=3000.0, step=1e-9, format="%.9f")
+                # エコー位置 n の入力項目を追加
+                echo_n = st.number_input("エコー位置 n", value=1, step=1, min_value=1)
+                # 補正係数 (2n - 1) の計算
+                factor_2n_1 = 2 * echo_n - 1
                 
                 # --- 超音波吸収計算ボタン ---
                 if st.button("超音波吸収を計算"):
@@ -158,11 +162,12 @@ def main():
                             cos_vals = df[cos_col].fillna(0).astype(float)
                             amplitude_sq = sin_vals**2 + cos_vals**2
                             amplitude_sq[amplitude_sq <= 0] = np.nan
-                            df['att (1/cm)'] = (-np.log(amplitude_sq) / (2 * sample_length_l_cm)).round(6)
+                            # 分母に (2n-1) を乗算
+                            df['att (1/cm)'] = (-np.log(amplitude_sq) / (2 * sample_length_l_cm * factor_2n_1)).round(6)
                             st.success("超音波吸収の計算が完了しました。")
                             st.rerun()
                         else:
-                            st.error("SinとCosの列を正しく割り当ててください。")
+                            st.error("SinとCos of列を正しく割り当ててください。")
                     except Exception as e:
                         st.error(f"超音波吸収の計算中にエラーが発生しました: {e}")
 
@@ -177,7 +182,8 @@ def main():
                             delta_phi = np.unwrap(phi) - np.unwrap(phi)[0]
                             f_hz = df[freq_col].astype(float) * 1e6
                             l_m = sample_length_l_cm / 100.0
-                            fai0 = (2 * np.pi * f_hz * l_m) / sound_speed_v
+                            # 分子に (2n-1) を乗算
+                            fai0 = (2 * np.pi * f_hz * l_m * factor_2n_1) / sound_speed_v
                             dc_per_c = (fai0**2 / (fai0 + delta_phi)**2) - 1
                             df['DC/C'] = dc_per_c
                             st.success("弾性定数相対変化の計算が完了しました。")
