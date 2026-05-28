@@ -82,11 +82,13 @@ def main():
                 return options.index(value_to_find)
 
             if analysis_method == "位相直交法":
-                mappings['Temp'] = st.selectbox("温度 (Temp) の列", col_options, index=get_index('Temp', 0))
-                mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=get_index('B', 3, b_col_options))
-                mappings['Sin'] = st.selectbox("Sin(V) の列", col_options, index=get_index('Sin', 6))
-                mappings['Cos'] = st.selectbox("Cos(V) の列", col_options, index=get_index('Cos', 7))
-                mappings['Freq'] = st.selectbox("周波数 (Freq) の列", col_options, index=get_index('Freq', 8))
+                # ★初期値のご指定通りにデフォルトインデックスを変更 (Temp:2, B:0, Sin:5, Cos:6, Freq:7)
+                # 磁場(B)は、b_col_optionsの0番目が「なし」で1番目が「0」になるため、デフォルトで「0」を指すように 1 を指定
+                mappings['Temp'] = st.selectbox("温度 (Temp) の列", col_options, index=get_index('Temp', 2))
+                mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=get_index('B', 1, b_col_options))
+                mappings['Sin'] = st.selectbox("Sin(V) の列", col_options, index=get_index('Sin', 5))
+                mappings['Cos'] = st.selectbox("Cos(V) の列", col_options, index=get_index('Cos', 6))
+                mappings['Freq'] = st.selectbox("周波数 (Freq) の列", col_options, index=get_index('Freq', 7))
             
             elif analysis_method == "位相比較法":
                 mappings['Temp'] = st.selectbox("温度 (Temp) の列", col_options, index=get_index('Temp', 0))
@@ -147,9 +149,7 @@ def main():
             if analysis_method == "位相直交法":
                 sample_length_l_cm = st.number_input("試料長 l (cm)", value=0.5, step=1e-9, format="%.9f")
                 sound_speed_v = st.number_input("音速 v (m/s)", value=3000.0, step=1e-9, format="%.9f")
-                # エコー位置 n の入力項目を追加
                 echo_n = st.number_input("エコー位置 n", value=1, step=1, min_value=1)
-                # 補正係数 (2n - 1) の計算
                 factor_2n_1 = 2 * echo_n - 1
                 
                 # --- 超音波吸収計算ボタン ---
@@ -162,12 +162,11 @@ def main():
                             cos_vals = df[cos_col].fillna(0).astype(float)
                             amplitude_sq = sin_vals**2 + cos_vals**2
                             amplitude_sq[amplitude_sq <= 0] = np.nan
-                            # 分母に (2n-1) を乗算
                             df['att (1/cm)'] = (-np.log(amplitude_sq) / (2 * sample_length_l_cm * factor_2n_1)).round(6)
                             st.success("超音波吸収の計算が完了しました。")
                             st.rerun()
                         else:
-                            st.error("SinとCos of列を正しく割り当ててください。")
+                            st.error("SinとCosの列を正しく割り当ててください。")
                     except Exception as e:
                         st.error(f"超音波吸収の計算中にエラーが発生しました: {e}")
 
@@ -182,7 +181,6 @@ def main():
                             delta_phi = np.unwrap(phi) - np.unwrap(phi)[0]
                             f_hz = df[freq_col].astype(float) * 1e6
                             l_m = sample_length_l_cm / 100.0
-                            # 分子に (2n-1) を乗算
                             fai0 = (2 * np.pi * f_hz * l_m * factor_2n_1) / sound_speed_v
                             dc_per_c = (fai0**2 / (fai0 + delta_phi)**2) - 1
                             df['DC/C'] = dc_per_c
