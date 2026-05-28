@@ -71,8 +71,34 @@ def main():
         # サイドバーの続きのUI項目を配置
         with st.sidebar:
             st.divider()
-            st.header("3. 列の割り当て")
-            st.write("表の列番号を、対応するデータの種類に割り当ててください。")
+            
+            # --- 【新機能】データ情報のボタン（測定モード選択） ---
+            st.header("3. 測定モードの自動選択")
+            if analysis_method == "位相比較法":
+                mode_option = st.radio(
+                    "モードを選択すると列が自動割当されます",
+                    ("手動設定", "無磁場温度依存", "磁場一定温度依存", "温度一定磁場依存")
+                )
+                
+                # ボタン（ラジオボタン）の選択状態に応じてセッションの値を強制書き換え
+                if mode_option == "無磁場温度依存":
+                    mappings['Temp'] = 0
+                    mappings['B'] = "なし"
+                    mappings['Freq'] = 2
+                elif mode_option == "磁場一定温度依存":
+                    mappings['Temp'] = 0
+                    mappings['B'] = 2
+                    mappings['Freq'] = 4
+                elif mode_option == "温度一定磁場依存":
+                    mappings['Temp'] = 2
+                    mappings['B'] = 0
+                    mappings['Freq'] = 3
+            else:
+                mode_option = "手動設定"
+
+            st.divider()
+            st.header("4. 列の割り当て確認")
+            st.write("現在の割り当て状況です（手動変更も可能です）。")
             
             def get_index(key, default_index=0, options=col_options):
                 safe_default_index = min(default_index, len(options) - 1)
@@ -89,12 +115,21 @@ def main():
                 mappings['Freq'] = st.selectbox("周波数 (Freq) の列", col_options, index=get_index('Freq', 7))
             
             elif analysis_method == "位相比較法":
-                mappings['Temp'] = st.selectbox("温度 (Temp) の列", col_options, index=get_index('Temp', 0))
-                mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=get_index('B', 3, b_col_options))
-                mappings['Freq'] = st.selectbox("周波数 (Freq) の列", col_options, index=get_index('Freq', 4))
+                # 自動設定の値を反映させつつUIを表示
+                default_t = mappings.get('Temp', 0)
+                default_b = mappings.get('B', "なし")
+                default_f = mappings.get('Freq', 4)
+                
+                idx_t = col_options.index(default_t) if default_t in col_options else 0
+                idx_b = b_col_options.index(default_b) if default_b in b_col_options else 0
+                idx_f = col_options.index(default_f) if default_f in col_options else 0
+
+                mappings['Temp'] = st.selectbox("温度 (Temp) の列", col_options, index=idx_t)
+                mappings['B'] = st.selectbox("磁場 (B) の列", b_col_options, index=idx_b)
+                mappings['Freq'] = st.selectbox("周波数 (Freq) の列", col_options, index=idx_f)
 
             st.divider()
-            st.header("4. 磁場補正（オプション）")
+            st.header("5. 磁場補正（オプション）")
             correction_type = st.radio("補正の種類を選択", ("磁場変化データ", "一定磁場データ"))
             if correction_type == "磁場変化データ":
                 intended_start_b = st.number_input("本来の開始磁場 (T)", value=0.0, step=0.5)
@@ -128,10 +163,21 @@ def main():
                     st.warning("磁場(B)の列が「なし」に設定されているため、補正は実行できませんでした。")
 
             st.divider()
-            st.header("5. 列の削除（オプション）")
+            st.header("6. 列の削除（オプション）")
             assigned_cols = [v for v in mappings.values() if v != 'なし']
             unassigned_cols = [c for c in df.columns if c not in assigned_cols]
-            cols_to_delete = st.multiselect("削除したい列（列番号）を選択", options=unassigned_cols)
+            
+            # 【新機能】自動選択時に、割り当てられなかった列が最初から選ばれた状態にする
+            if mode_option != "手動設定":
+                default_delete_cols = unassigned_cols
+            else:
+                default_delete_cols = []
+
+            cols_to_delete = st.multiselect(
+                "削除したい列（列番号）を選択", 
+                options=unassigned_cols,
+                default=default_delete_cols
+            )
             
             # --- 列削除ボタンの処理 ---
             if st.button("選択した列を削除"):
@@ -142,7 +188,7 @@ def main():
                     st.rerun()
 
             st.divider()
-            st.header("6. 計算パラメータと実行")
+            st.header("7. 計算パラメータと実行")
             
             if analysis_method == "位相直交法":
                 sample_length_l_cm = st.number_input("試料長 l (cm)", value=0.5, step=1e-9, format="%.9f")
@@ -190,7 +236,6 @@ def main():
                         st.error(f"弾性定数変化の計算中にエラーが発生しました: {e}")
             
             elif analysis_method == "位相比較法":
-                # Freqの列が正しく割り当てられている場合、0行目の値をデフォルト値（初期値）として自動取得する
                 compare_freq_col = mappings.get('Freq')
                 if compare_freq_col is not None and compare_freq_col in df.columns:
                     try:
@@ -210,7 +255,7 @@ def main():
                             freq_mhz = df[freq_col].astype(float)
                             delta_f_over_f0 = (freq_mhz - f0_mhz) / f0_mhz
                             dc_per_c_comp = 2 * delta_f_over_f0 + (delta_f_over_f0)**2
-                            df['DC/C'] = dc_per_c_comp  # 表示名の整合性のため 'DC/C' に統一しました
+                            df['DC/C'] = dc_per_c_comp
                             st.success("弾性率相対変化（比較法）の計算が完了しました。")
                             st.rerun()
                         else:
